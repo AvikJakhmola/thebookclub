@@ -1,9 +1,10 @@
+from django.contrib import admin
 from django.urls import path
-from . import views
+from bookclub import views
 
 urlpatterns = [
-    path("", views.home, name = "home"),
-    path('deeplearning/', views.deep_learning, name='deeplearning'),
+    path('admin/', admin.site.urls),
+    path('', views.home, name='home'),
+    path('unitview/<int:book_number>/', views.unitview, name='unitview'),
     path('toggle_completed_status/', views.toggle_completed_status, name='toggle_completed_status'),
-
 ]
