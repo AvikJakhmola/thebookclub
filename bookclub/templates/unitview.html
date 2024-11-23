@@ -76,7 +76,7 @@
 
         /* Progress bar below the book cover */
         .progress-bar-container {
-            width: 40%; /* Smaller width */
+            width: 250px;
             margin-top: 20px;
             margin-bottom: 10px;
         }
@@ -90,45 +90,68 @@
         }
 
         .progress-bar-inner {
-            width: 0%; /* Change this based on actual progress */
+            width: 0%;
             height: 100%;
             background-color: #0dcece;
             border-radius: 5px;
         }
 
-        /* Right Section: Progress and details */
+        .details {
+            text-align: center;
+            font-size: 1rem;
+            margin-top: 5px;
+        }
+
+        /* Right Section: Units */
         .progress-section {
             flex: 2;
             margin-left: 30px;
         }
 
         .unit-row {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 20px;
             font-size: 1.2rem;
         }
 
         .unit-title {
-            flex: 1;
+            font-weight: bold;
+            margin-bottom: 10px;
         }
 
-        .toggle {
-            width: 20px;
-            height: 20px;
-            border: 2px solid black;
-            border-radius: 50%;
+        .page-row {
+            margin-left: 20px;
+            font-size: 1rem;
+            color: #333;
             display: flex;
             align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            margin-right: 10px;
         }
 
-        .toggle.checked {
-            background-color: #0dcece;
-            color: white;
+        /* Bullet point styling */
+        .page-row a {
+            width: 15px; /* Size of the bullet point */
+            height: 15px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid #0dcece; /* Hollow border */
+            border-radius: 50%; /* Makes it circular */
+            color: #0dcece; /* Text color */
+            font-size: 0.8rem; /* Tick size */
             font-weight: bold;
+            margin-right: 10px;
+            cursor: pointer;
+            background-color: white; /* Background for hollow */
+            text-decoration: none;
+        }
+
+        .page-row a.completed {
+            background-color: #0dcece; /* Filled background */
+            color: rgb(0, 0, 0); /* Tick color */
+        }
+
+        .page-row a:hover {
+            border-color: #0aa9a9;
+            color: #0aa9a9;
         }
 
     </style>
@@ -149,12 +172,15 @@
             <div class="image-section">
                 <img src="{{ cover_image }}" alt="{{ book_title }} Book Cover">            
                 <!-- Progress bar below the book cover -->
-                <div id="progress-bar-container" data-total-pages="{{ total_pages }}">
+                <div id="progress-bar-container" class="progress-bar-container" data-total-pages="{{ total_pages }}">
                     <div class="progress-bar">
                         <div id="progress-bar-inner" class="progress-bar-inner" style="width: 0%;"></div>
                     </div>
-                    <div class="details">Progress: <span id="progress-text">0/{{ total_pages }}</span></div>
+                    <div class="details">
+                        Progress: <span id="progress-text">0/{{ total_pages }}</span>
+                    </div>
                 </div>
+                
             </div>
 
             <!-- Right Section: Units -->
@@ -163,15 +189,20 @@
                 <div>
                     {% for unit in units %}
                     <div class="unit-row">
-                        <div class="toggle {% if unit.completed %}checked{% endif %}"
-                             data-unit-id="{{ unit.unit }}"
-                             data-completed="{{ unit.completed|yesno:'true,false' }}"
-                             onclick="toggleUnit(this)">
-                            {% if unit.completed %}✓{% endif %}
+                        <div class="unit-title">Unit {{ unit.unit }}: {{ unit.pages|length }} Pages</div>
+                        {% for page in unit.pages %}
+                        <div class="page-row">
+                            <!-- Render tick mark if completed -->
+                            <a href="javascript:void(0);"
+                               class="{% if page.completed %}completed{% endif %}"
+                               data-page-id="{{ page.id }}"
+                               onclick="togglePage(this)">
+                               {% if page.completed %}✓{% endif %}
+                            </a>
+                            Page {{ forloop.counter }}: {{ page.content }}
                         </div>
-                        <span class="unit-title">Unit {{ unit.unit }}: {{ unit.pages }} Pages</span>
+                        {% endfor %}
                     </div>
-                    
                     {% endfor %}
                 </div>
             </div>
@@ -179,58 +210,67 @@
     </div>
 
     <script>
-        function toggleUnit(element) {
-    const unitId = element.getAttribute('data-unit-id');
-    const isCompleted = element.classList.toggle('checked'); // Toggle class
-    element.innerHTML = isCompleted ? '✓' : ''; // Update UI toggle symbol
+        function updateProgressBar() {
+            // Get total pages from the container
+            const totalPages = parseInt(document.getElementById("progress-bar-container").getAttribute("data-total-pages"));
+            let completedPages = 0;
 
-    fetch('/toggle_completed_status/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': '{{ csrf_token }}', // Ensure CSRF protection
-        },
-        body: JSON.stringify({
-            unit_id: unitId, // Send unit ID to the server
-            completed: isCompleted, // Send updated status
-        }),
-    })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                updateProgress(); // Update progress bar on successful toggle
-            } else {
-                alert(data.error || 'Failed to update the unit.');
-                element.classList.toggle('checked'); // Revert UI if backend fails
-                element.innerHTML = isCompleted ? '' : '✓'; // Revert toggle symbol
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred while updating the unit.');
-            element.classList.toggle('checked'); // Revert UI on error
-            element.innerHTML = isCompleted ? '' : '✓'; // Revert toggle symbol
-        });
-}
+            // Count completed pages by checking the "completed" class
+            document.querySelectorAll(".page-row a.completed").forEach(() => {
+                completedPages++;
+            });
 
-function updateProgress() {
-    const totalPages = parseInt(document.getElementById("progress-bar-container").getAttribute("data-total-pages"));
-    let completedPages = 0;
+            // Calculate progress percentage
+            const progressPercentage = (completedPages / totalPages) * 100;
 
-    // Calculate total completed pages
-    document.querySelectorAll(".toggle.checked").forEach(toggle => {
-        const pages = parseInt(toggle.parentNode.querySelector(".unit-title").innerText.split('-')[1]);
-        completedPages += pages;
-    });
+            // Update the progress bar width and text
+            document.getElementById("progress-bar-inner").style.width = `${progressPercentage}%`;
+            document.getElementById("progress-text").innerText = `${completedPages}/${totalPages}`;
+        }
 
-    // Update progress bar
-    const completionPercentage = (completedPages / totalPages) * 100;
-    document.getElementById("progress-bar-inner").style.width = `${completionPercentage}%`;
-    document.getElementById("progress-text").innerText = `${completedPages}/${totalPages} Pages`;
-}
+        function togglePage(element) {
+            const pageId = element.getAttribute('data-page-id');
+            const isCompleted = !element.classList.contains('completed'); // Toggle state
 
-document.addEventListener("DOMContentLoaded", updateProgress); // Initialize progress bar
+            // Update UI immediately
+            element.classList.toggle('completed', isCompleted);
+            element.innerHTML = isCompleted ? '✓' : ''; // Update tick mark
 
+            // Send the toggle state to the backend
+            fetch('/toggle_page_completed_status/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}', // Ensure CSRF protection
+                },
+                body: JSON.stringify({
+                    page_id: pageId,
+                    completed: isCompleted
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    // Backend failed, revert UI change
+                    element.classList.toggle('completed', !isCompleted);
+                    element.innerHTML = !isCompleted ? '✓' : '';
+                    alert(data.error || 'Failed to update the page status.');
+                } else {
+                    // Update the progress bar
+                    updateProgressBar();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Revert UI change in case of an error
+                element.classList.toggle('completed', !isCompleted);
+                element.innerHTML = !isCompleted ? '✓' : '';
+                alert('An error occurred while updating the page status.');
+            });
+        }
+
+        // Update progress bar on initial page load
+        document.addEventListener("DOMContentLoaded", updateProgressBar);
     </script>
 </body>
 </html>

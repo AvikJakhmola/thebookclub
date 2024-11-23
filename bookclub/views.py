@@ -21,37 +21,58 @@ def home(request):
 
     return render(request, "home.html", {'books': books})
 
+def page_detail(request, page_id):
+    conn = Neo4jConnection()
+    query = """
+    MATCH (p:Page {id: $page_id})
+    RETURN p.id AS id, p.content AS content
+    """
+    page_data = conn.query(query, {'page_id': page_id})
+    conn.close()
+
+    if page_data:
+        page = page_data[0]  # Extract the first (and only) result
+        return render(request, "page_detail.html", {'page': page})
+    else:
+        return render(request, "404.html", status=404)
+
+
 
 def unitview(request, book_number):
     conn = Neo4jConnection()
     query = """
     MATCH (b:Book {book_number: $book_number})-[:BOOK_CONTAINS_UNIT]->(u:Unit)-[:UNIT_CONTAINS_PAGE]->(p:Page)
-    RETURN b.title AS title, b.author AS author, b.cover_image AS cover_image, u.id AS unit, u.title AS unit_title, count(p) AS pages, u.completed AS completed
+    RETURN b.title AS title, 
+           b.author AS author, 
+           b.cover_image AS cover_image, 
+           u.id AS unit, 
+           u.title AS unit_title, 
+           collect({id: p.id, content: p.content, completed: p.completed}) AS pages, 
+           u.completed AS completed
     ORDER BY u.id
     """
-
     book_data = conn.query(query, {'book_number': book_number})
     conn.close()
 
     if book_data:
         book_title = book_data[0]['title']
         book_author = book_data[0]['author']
-        cover_image = book_data[0].get('cover_image', '/static/images/default_cover.jpg')  # Default if not found
+        cover_image = book_data[0].get('cover_image', '/static/images/default_cover.jpg')
         units = [
             {
-                'unit': row.get('unit'),  # This now corresponds to the 'id' property
+                'unit': row.get('unit'),
                 'unit_title': row.get('unit_title', 'Untitled Unit'),
-                'pages': row.get('pages', 0),
+                'pages': row.get('pages', []),  # Ensure pages is a list
                 'completed': row.get('completed', False),
             }
             for row in book_data
         ]
 
-        total_pages = sum(unit['pages'] for unit in units)
+        total_pages = sum(len(unit['pages']) for unit in units)
     else:
         book_title = "Unknown Title"
         book_author = "Unknown Author"
-        cover_image = '/static/images/default_cover.jpg'  # Default image
+        cover_image = '/static/images/default_cover.jpg'
         units = []
         total_pages = 0
 
@@ -64,39 +85,41 @@ def unitview(request, book_number):
     })
 
 
+
+
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
 from .neo4j import Neo4jConnection  # Ensure this import is correct
 
 @csrf_exempt
-def toggle_completed_status(request):
+def toggle_page_completed_status(request):
     if request.method == "POST":
         try:
-            # Parse JSON data from the request
             data = json.loads(request.body)
-            unit_id = data.get('unit_id')  # Ensure this matches the "unit" property in Neo4j
+            page_id = data.get('page_id')
             completed = data.get('completed', False)
 
-            if not unit_id:
-                return JsonResponse({'success': False, 'error': 'Unit ID is missing.'}, status=400)
+            if not page_id:
+                return JsonResponse({'success': False, 'error': 'Page ID is missing.'}, status=400)
 
-            # Toggle the completed status in the database
             conn = Neo4jConnection()
             query = """
-            MATCH (u:Unit {id: $unit_id})
-            SET u.completed = $completed
-            RETURN u.completed AS new_status
+            MATCH (p:Page {id: $page_id})
+            SET p.completed = $completed
+            RETURN p.completed AS new_status
             """
-            result = conn.query(query, parameters={'unit_id': int(unit_id), 'completed': completed})
+            result = conn.query(query, {'page_id': page_id, 'completed': completed})
             conn.close()
 
             if result:
                 return JsonResponse({'success': True, 'completed': result[0]['new_status']})
             else:
-                return JsonResponse({'success': False, 'error': 'Failed to update the unit.'})
+                return JsonResponse({'success': False, 'error': 'Failed to update the page.'})
         except Exception as e:
-            print(f"Error: {e}")
             return JsonResponse({'success': False, 'error': str(e)}, status=500)
     else:
         return JsonResponse({'success': False, 'error': 'Invalid request method.'}, status=405)
+    
+
+    
