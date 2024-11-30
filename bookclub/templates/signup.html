@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up</title>
+</head>
+<body>
+    <h1>Sign Up</h1>
+    <form id="signup-form">
+        <input type="text" id="name" placeholder="Name" required><br>
+        <input type="email" id="email" placeholder="Email" required><br>
+        <input type="password" id="password" placeholder="Password" required><br>
+        <button type="submit">Sign Up</button>
+    </form>
+    
+    <p>Already signed up?</p>
+    <button id="go-to-login">Go to Login Page</button>
+
+    <script>
+        // Handle sign-up form submission
+        document.getElementById("signup-form").addEventListener("submit", function (e) {
+            e.preventDefault();
+
+            const name = document.getElementById("name").value;
+            const email = document.getElementById("email").value;
+            const password = document.getElementById("password").value;
+
+            fetch("/signup/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ name, email, password }),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert("Sign-up successful! You can now log in.");
+                        window.location.href = "/login/";
+                    } else {
+                        alert("Error: " + data.error);
+                    }
+                });
+        });
+
+        // Handle navigation to login page
+        document.getElementById("go-to-login").addEventListener("click", function () {
+            window.location.href = "/login/";
+        });
+    </script>
+</body>
+</html>

@@ -156,7 +156,7 @@
 
     </style>
 </head>
-<body>
+<body data-user-id="{{ user_id }}">
 
     <!-- Top-left text section for book title and author -->
     <div class="book-header">
@@ -214,63 +214,75 @@
             // Get total pages from the container
             const totalPages = parseInt(document.getElementById("progress-bar-container").getAttribute("data-total-pages"));
             let completedPages = 0;
-
+    
             // Count completed pages by checking the "completed" class
             document.querySelectorAll(".page-row a.completed").forEach(() => {
                 completedPages++;
             });
-
+    
             // Calculate progress percentage
             const progressPercentage = (completedPages / totalPages) * 100;
-
+    
             // Update the progress bar width and text
             document.getElementById("progress-bar-inner").style.width = `${progressPercentage}%`;
             document.getElementById("progress-text").innerText = `${completedPages}/${totalPages}`;
         }
-
+    
         function togglePage(element) {
-            const pageId = element.getAttribute('data-page-id');
-            const isCompleted = !element.classList.contains('completed'); // Toggle state
+    const pageId = element.getAttribute('data-page-id');
+    const isCompleted = !element.classList.contains('completed'); // Toggle state
 
-            // Update UI immediately
-            element.classList.toggle('completed', isCompleted);
-            element.innerHTML = isCompleted ? '✓' : ''; // Update tick mark
+    // Retrieve user_id from the data attribute
+    const userId = document.body.getAttribute('data-user-id');
 
-            // Send the toggle state to the backend
-            fetch('/toggle_page_completed_status/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}', // Ensure CSRF protection
-                },
-                body: JSON.stringify({
-                    page_id: pageId,
-                    completed: isCompleted
-                }),
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (!data.success) {
-                    // Backend failed, revert UI change
-                    element.classList.toggle('completed', !isCompleted);
-                    element.innerHTML = !isCompleted ? '✓' : '';
-                    alert(data.error || 'Failed to update the page status.');
-                } else {
-                    // Update the progress bar
-                    updateProgressBar();
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                // Revert UI change in case of an error
-                element.classList.toggle('completed', !isCompleted);
-                element.innerHTML = !isCompleted ? '✓' : '';
-                alert('An error occurred while updating the page status.');
-            });
+    // Validate that userId is available
+    if (!userId) {
+        alert("User ID is missing. Please make sure you are logged in.");
+        return;
+    }
+
+    // Update UI immediately
+    element.classList.toggle('completed', isCompleted);
+    element.innerHTML = isCompleted ? '✓' : ''; // Update tick mark
+
+    // Send the toggle state to the backend
+    fetch('/toggle_page_completed_status/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}', // Ensure CSRF protection
+        },
+        body: JSON.stringify({
+            user_id: userId,
+            page_id: pageId,
+            completed: isCompleted
+        }),
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            // Backend failed, revert UI change
+            element.classList.toggle('completed', !isCompleted);
+            element.innerHTML = !isCompleted ? '✓' : '';
+            alert(data.error || 'Failed to update the page status.');
+        } else {
+            // Update the progress bar
+            updateProgressBar();
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        // Revert UI change in case of an error
+        element.classList.toggle('completed', !isCompleted);
+        element.innerHTML = !isCompleted ? '✓' : '';
+        alert('An error occurred while updating the page status.');
+    });
+}
 
+    
         // Update progress bar on initial page load
         document.addEventListener("DOMContentLoaded", updateProgressBar);
     </script>
+    
 </body>
 </html>

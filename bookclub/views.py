@@ -5,8 +5,163 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 from django.http import JsonResponse
 
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
+def update_user_progress(request):
+    if request.method == "POST":
+        try:
+            # Parse the request data
+            data = json.loads(request.body)
+            user_id = data.get("user_id")
+            page_id = data.get("page_id")
+            completed = data.get("completed")
+
+            # Validate the input
+            if not user_id or not page_id:
+                return JsonResponse({"success": False, "error": "Missing user_id or page_id"}, status=400)
+
+            # Update the user's progress in Neo4j
+            conn = Neo4jConnection()
+            query = """
+            MATCH (u:User {user_id: $user_id})-[r:PROGRESS]->(p:Page {id: $page_id})
+            SET r.completed = $completed
+            """
+            conn.query(query, {"user_id": user_id, "page_id": page_id, "completed": completed})
+            conn.close()
+
+            return JsonResponse({"success": True, "message": "User progress updated successfully"})
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)}, status=500)
+    else:
+        return JsonResponse({"success": False, "error": "Invalid request method"}, status=405)
+
+
+import uuid
+
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
+def signup(request):
+    if request.method == "GET":
+        return render(request, "signup.html")  # Render the sign-up page
+
+    if request.method == "POST":
+        data = json.loads(request.body)
+        name = data.get('name')
+        email = data.get('email')
+        password = data.get('password')
+
+        if not name or not email or not password:
+            return JsonResponse({'success': False, 'error': 'All fields are required'}, status=400)
+
+        # Generate a unique user ID using UUID
+        user_id = str(uuid.uuid4())
+
+        # Create the user in the database and set relationships
+        conn = Neo4jConnection()
+        try:
+            # Step 1: Create the User node
+            user_query = """
+            CREATE (u:User {user_id: $user_id, name: $name, email: $email, password: $password})
+            """
+            conn.query(user_query, {'user_id': user_id, 'name': name, 'email': email, 'password': password})
+
+            # Step 2: Set relationships with "My Library" or books
+            relationship_query = """
+            MATCH (u:User {user_id: $user_id})
+            MERGE (l:Library {name: "My Library"})
+            MERGE (u)-[:CAN_ACCESS]->(l)
+            """
+            conn.query(relationship_query, {'user_id': user_id})
+
+            # Step 3: Create relationships for progress tracking (optional)
+            book_relationship_query = """
+            MATCH (u:User {user_id: $user_id}), (b:Book)
+            MERGE (u)-[:CAN_VIEW]->(b)
+            """
+            conn.query(book_relationship_query, {'user_id': user_id})
+
+        finally:
+            conn.close()
+
+        return JsonResponse({'success': True, 'message': 'User registered successfully'})
+
+
+    
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt  # Remove this line if using CSRF token in the request
+def login(request):
+    if request.method == "GET":
+        return render(request, "login.html")
+    if request.method == "POST":
+        data = json.loads(request.body)
+        email = data.get('email')
+        password = data.get('password')
+
+        conn = Neo4jConnection()
+        query = """
+        MATCH (u:User {email: $email, password: $password})
+        RETURN u
+        """
+        result = conn.query(query, {'email': email, 'password': password})
+        conn.close()
+
+        if result:
+            request.session['user_id'] = result[0]['u']['user_id']  # Save user ID in session
+            return JsonResponse({'success': True, 'message': 'Login successful'})
+        return JsonResponse({'success': False, 'error': 'Invalid credentials'}, status=400)
+
+
+
+@csrf_exempt
+def update_user_progress(request):
+    if request.method == "POST":
+        try:
+            # Parse the request data
+            data = json.loads(request.body)
+            user_id = data.get("user_id")
+            page_id = data.get("page_id")
+            completed = data.get("completed")
+
+            # Validate the input
+            if not user_id or not page_id:
+                return JsonResponse({"success": False, "error": "Missing user_id or page_id"}, status=400)
+
+            # Update the user's progress in Neo4j
+            conn = Neo4jConnection()
+            query = """
+            MATCH (u:User {user_id: $user_id}), (p:Page {id: $page_id})
+            MERGE (u)-[r:PROGRESS]->(p)
+            SET r.completed = $completed
+            """
+            conn.query(query, {"user_id": user_id, "page_id": page_id, "completed": completed})
+            conn.close()
+
+            return JsonResponse({"success": True, "message": "User progress updated successfully"})
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)}, status=500)
+    else:
+        return JsonResponse({"success": False, "error": "Invalid request method"}, status=405)
+    
+
 def home(request):
+    user_id = request.session.get('user_id')  # Retrieve user ID from session
+
+    if not user_id:
+        # If the user is not logged in, redirect to the login page
+        return redirect('/login/')
+
+    # Retrieve user name from Neo4j using the user ID
     conn = Neo4jConnection()
+    user_query = """
+    MATCH (u:User {user_id: $user_id})
+    RETURN u.name AS name
+    """
+    user_result = conn.query(user_query, {'user_id': user_id})
+    user_name = user_result[0]['name'] if user_result else 'User'
+    
     # Query to fetch book titles and book_number
     query = """
     MATCH (b:Book)
@@ -19,70 +174,122 @@ def home(request):
     for book in books:
         book['book_number'] = int(book['book_number'])
 
-    return render(request, "home.html", {'books': books})
+    # Pass the user's name and books to the template
+    return render(request, "home.html", {'user_name': user_name, 'books': books})
 
-def page_detail(request, page_id):
+
+
+from django.http import JsonResponse
+from .neo4j import Neo4jConnection
+
+def get_book_progress(request, book_number):
+    user_id = request.session.get('user_id')  # Assuming the user is logged in and session-managed
+    if not user_id:
+        return JsonResponse({"success": False, "error": "User not logged in"}, status=401)
+
     conn = Neo4jConnection()
-    query = """
-    MATCH (p:Page {id: $page_id})
-    RETURN p.id AS id, p.content AS content
-    """
-    page_data = conn.query(query, {'page_id': page_id})
-    conn.close()
+    try:
+        # Query to get completed pages for the user in the specified book
+        query = """
+        MATCH (u:User {user_id: $user_id})-[:PROGRESS {completed: true}]->(p:Page)<-[:UNIT_CONTAINS_PAGE]-(unit:Unit)<-[:BOOK_CONTAINS_UNIT]-(b:Book {book_number: $book_number})
+        WITH count(p) AS completed_pages
+        MATCH (b:Book {book_number: $book_number})-[:BOOK_CONTAINS_UNIT]->(:Unit)-[:UNIT_CONTAINS_PAGE]->(p:Page)
+        RETURN count(p) AS total_pages, completed_pages
+        """
+        result = conn.query(query, {"user_id": user_id, "book_number": book_number})
+        conn.close()
 
-    if page_data:
-        page = page_data[0]  # Extract the first (and only) result
-        return render(request, "page_detail.html", {'page': page})
-    else:
-        return render(request, "404.html", status=404)
+        if result:
+            total_pages = result[0]["total_pages"]
+            completed_pages = result[0]["completed_pages"]
+            progress_percentage = (completed_pages / total_pages) * 100 if total_pages > 0 else 0
+
+            return JsonResponse({
+                "success": True,
+                "total_pages": total_pages,
+                "completed_pages": completed_pages,
+                "progress_percentage": progress_percentage
+            })
+        else:
+            return JsonResponse({"success": False, "error": "No progress data found"}, status=404)
+    except Exception as e:
+        conn.close()
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
 
 def unitview(request, book_number):
+    user_id = request.session.get('user_id')  # Assuming the user is logged in and session-managed
+
+    if not user_id:
+        return JsonResponse({"success": False, "error": "User not logged in"}, status=401)
+
     conn = Neo4jConnection()
-    query = """
+    
+    # Fetch book data
+    book_query = """
     MATCH (b:Book {book_number: $book_number})-[:BOOK_CONTAINS_UNIT]->(u:Unit)-[:UNIT_CONTAINS_PAGE]->(p:Page)
     RETURN b.title AS title, 
            b.author AS author, 
            b.cover_image AS cover_image, 
            u.id AS unit, 
            u.title AS unit_title, 
-           collect({id: p.id, content: p.content, completed: p.completed}) AS pages, 
+           collect({id: p.id, content: p.content}) AS pages, 
            u.completed AS completed
     ORDER BY u.id
     """
-    book_data = conn.query(query, {'book_number': book_number})
+    book_data = conn.query(book_query, {'book_number': book_number})
+    
+    # Fetch user's progress data
+    progress_query = """
+    MATCH (u:User {user_id: $user_id})-[r:PROGRESS]->(p:Page)<-[:UNIT_CONTAINS_PAGE]-(unit:Unit)<-[:BOOK_CONTAINS_UNIT]-(b:Book {book_number: $book_number})
+    RETURN p.id AS page_id, r.completed AS completed
+    """
+    progress_data = conn.query(progress_query, {'user_id': user_id, 'book_number': book_number})
     conn.close()
 
+    # Convert progress data to a dictionary for easy lookup
+    progress_dict = {progress['page_id']: progress['completed'] for progress in progress_data}
+
     if book_data:
-        book_title = book_data[0]['title']
-        book_author = book_data[0]['author']
-        cover_image = book_data[0].get('cover_image', '/static/images/default_cover.jpg')
         units = [
             {
                 'unit': row.get('unit'),
                 'unit_title': row.get('unit_title', 'Untitled Unit'),
-                'pages': row.get('pages', []),  # Ensure pages is a list
+                'pages': [
+                    {
+                        'id': page['id'],
+                        'content': page['content'],
+                        'completed': progress_dict.get(page['id'], False)  # Set completed status based on user progress
+                    } for page in row.get('pages', [])
+                ],
                 'completed': row.get('completed', False),
             }
             for row in book_data
         ]
 
         total_pages = sum(len(unit['pages']) for unit in units)
-    else:
-        book_title = "Unknown Title"
-        book_author = "Unknown Author"
-        cover_image = '/static/images/default_cover.jpg'
-        units = []
-        total_pages = 0
 
-    return render(request, "unitview.html", {
-        'book_title': book_title,
-        'book_author': book_author,
-        'cover_image': cover_image,
-        'units': units,
-        'total_pages': total_pages,
-    })
+        context = {
+            'user_id': user_id,
+            'book_title': book_data[0]['title'],
+            'book_author': book_data[0]['author'],
+            'cover_image': book_data[0].get('cover_image', '/static/images/default_cover.jpg'),
+            'units': units,
+            'total_pages': total_pages
+        }
+    else:
+        context = {
+            'user_id': user_id,
+            'book_title': "Unknown Title",
+            'book_author': "Unknown Author",
+            'cover_image': '/static/images/default_cover.jpg',
+            'units': [],
+            'total_pages': 0
+        }
+
+    return render(request, "unitview.html", context)
+
 
 
 
@@ -92,34 +299,30 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 from .neo4j import Neo4jConnection  # Ensure this import is correct
 
+from django.views.decorators.csrf import csrf_exempt
+
 @csrf_exempt
 def toggle_page_completed_status(request):
     if request.method == "POST":
         try:
             data = json.loads(request.body)
+            user_id = data.get('user_id')
             page_id = data.get('page_id')
             completed = data.get('completed', False)
 
-            if not page_id:
-                return JsonResponse({'success': False, 'error': 'Page ID is missing.'}, status=400)
+            if not user_id or not page_id:
+                return JsonResponse({'success': False, 'error': 'Missing user_id or page_id.'}, status=400)
 
             conn = Neo4jConnection()
             query = """
-            MATCH (p:Page {id: $page_id})
-            SET p.completed = $completed
-            RETURN p.completed AS new_status
+            MATCH (u:User {user_id: $user_id})-[r:PROGRESS]->(p:Page {id: $page_id})
+            SET r.completed = $completed
             """
-            result = conn.query(query, {'page_id': page_id, 'completed': completed})
+            conn.query(query, {'user_id': user_id, 'page_id': page_id, 'completed': completed})
             conn.close()
 
-            if result:
-                return JsonResponse({'success': True, 'completed': result[0]['new_status']})
-            else:
-                return JsonResponse({'success': False, 'error': 'Failed to update the page.'})
+            return JsonResponse({'success': True, 'message': 'User progress updated successfully'})
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=500)
     else:
-        return JsonResponse({'success': False, 'error': 'Invalid request method.'}, status=405)
-    
-
-    
+        return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
