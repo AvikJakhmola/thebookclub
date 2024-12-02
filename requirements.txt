@@ -1,0 +1,6 @@
+asgiref==3.8.1
+Django==5.1.2
+neo4j==5.25.0
+python-decouple==3.8
+pytz==2024.2
+sqlparse==0.5.1
