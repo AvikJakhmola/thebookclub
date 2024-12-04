@@ -43,9 +43,16 @@ from django.views.decorators.csrf import csrf_exempt
 
 from passlib.hash import bcrypt
 
+from django.http import JsonResponse, HttpResponse
+from django.shortcuts import render
+
 @csrf_exempt
 def signup(request):
-    if request.method == "POST":
+    if request.method == "GET":
+        # Render the signup.html page for GET requests
+        return render(request, "signup.html")  # Ensure signup.html exists in your templates directory
+
+    elif request.method == "POST":
         data = json.loads(request.body)
         name = data.get('name')
         email = data.get('email')
@@ -57,16 +64,13 @@ def signup(request):
         # Generate a unique user ID using UUID
         user_id = str(uuid.uuid4())
 
-        # Hash the password
-        hashed_password = bcrypt.hash(password)
-
         # Create the user in the database and set relationships
         conn = Neo4jConnection()
         try:
             user_query = """
             CREATE (u:User {user_id: $user_id, name: $name, email: $email, password: $password})
             """
-            conn.query(user_query, {'user_id': user_id, 'name': name, 'email': email, 'password': hashed_password})
+            conn.query(user_query, {'user_id': user_id, 'name': name, 'email': email, 'password': password})
 
             relationship_query = """
             MATCH (u:User {user_id: $user_id})
@@ -75,16 +79,14 @@ def signup(request):
             """
             conn.query(relationship_query, {'user_id': user_id})
 
-            book_relationship_query = """
-            MATCH (u:User {user_id: $user_id}), (b:Book)
-            MERGE (u)-[:CAN_VIEW]->(b)
-            """
-            conn.query(book_relationship_query, {'user_id': user_id})
-
         finally:
             conn.close()
 
         return JsonResponse({'success': True, 'message': 'User registered successfully'})
+
+    # If the request method is not GET or POST, return an error
+    return HttpResponse("Method not allowed", status=405)
+
 
 
 from passlib.hash import bcrypt
