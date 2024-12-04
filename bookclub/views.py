@@ -91,32 +91,49 @@ def signup(request):
 
 from passlib.hash import bcrypt
 
+from django.http import JsonResponse, HttpResponse
+from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
+import json
+
 @csrf_exempt
 def login(request):
-    if request.method == "POST":
+    if request.method == "GET":
+        # Render the login.html template
+        return render(request, "login.html")  # Ensure "login.html" exists in your templates folder
+
+    elif request.method == "POST":
         data = json.loads(request.body)
         email = data.get('email')
         password = data.get('password')
 
+        if not email or not password:
+            return JsonResponse({'success': False, 'error': 'Email and password are required'}, status=400)
+
         conn = Neo4jConnection()
         query = """
         MATCH (u:User {email: $email})
-        RETURN u.password AS hashed_password, u.user_id AS user_id
+        RETURN u.password AS stored_password, u.user_id AS user_id
         """
         result = conn.query(query, {'email': email})
         conn.close()
 
         if result:
-            hashed_password = result[0].get('hashed_password')
+            stored_password = result[0].get('stored_password')
             user_id = result[0].get('user_id')
 
-            if bcrypt.verify(password, hashed_password):  # Verify the hashed password
+            # Password check (update this if passwords are hashed)
+            if password == stored_password:
                 request.session['user_id'] = user_id  # Save user ID in session
                 return JsonResponse({'success': True, 'message': 'Login successful'})
             else:
                 return JsonResponse({'success': False, 'error': 'Invalid credentials'}, status=400)
 
         return JsonResponse({'success': False, 'error': 'Invalid credentials'}, status=400)
+
+    # Handle unsupported HTTP methods
+    return HttpResponse("Method not allowed", status=405)
+
 
 
 @csrf_exempt
