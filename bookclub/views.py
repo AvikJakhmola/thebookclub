@@ -41,11 +41,10 @@ import uuid
 
 from django.views.decorators.csrf import csrf_exempt
 
+from passlib.hash import bcrypt
+
 @csrf_exempt
 def signup(request):
-    if request.method == "GET":
-        return render(request, "signup.html")  # Render the sign-up page
-
     if request.method == "POST":
         data = json.loads(request.body)
         name = data.get('name')
@@ -58,16 +57,17 @@ def signup(request):
         # Generate a unique user ID using UUID
         user_id = str(uuid.uuid4())
 
+        # Hash the password
+        hashed_password = bcrypt.hash(password)
+
         # Create the user in the database and set relationships
         conn = Neo4jConnection()
         try:
-            # Step 1: Create the User node
             user_query = """
             CREATE (u:User {user_id: $user_id, name: $name, email: $email, password: $password})
             """
-            conn.query(user_query, {'user_id': user_id, 'name': name, 'email': email, 'password': password})
+            conn.query(user_query, {'user_id': user_id, 'name': name, 'email': email, 'password': hashed_password})
 
-            # Step 2: Set relationships with "My Library" or books
             relationship_query = """
             MATCH (u:User {user_id: $user_id})
             MERGE (l:Library {name: "My Library"})
@@ -75,7 +75,6 @@ def signup(request):
             """
             conn.query(relationship_query, {'user_id': user_id})
 
-            # Step 3: Create relationships for progress tracking (optional)
             book_relationship_query = """
             MATCH (u:User {user_id: $user_id}), (b:Book)
             MERGE (u)-[:CAN_VIEW]->(b)
@@ -88,13 +87,10 @@ def signup(request):
         return JsonResponse({'success': True, 'message': 'User registered successfully'})
 
 
-    
-from django.views.decorators.csrf import csrf_exempt
+from passlib.hash import bcrypt
 
-@csrf_exempt  # Remove this line if using CSRF token in the request
+@csrf_exempt
 def login(request):
-    if request.method == "GET":
-        return render(request, "login.html")
     if request.method == "POST":
         data = json.loads(request.body)
         email = data.get('email')
@@ -102,17 +98,23 @@ def login(request):
 
         conn = Neo4jConnection()
         query = """
-        MATCH (u:User {email: $email, password: $password})
-        RETURN u
+        MATCH (u:User {email: $email})
+        RETURN u.password AS hashed_password, u.user_id AS user_id
         """
-        result = conn.query(query, {'email': email, 'password': password})
+        result = conn.query(query, {'email': email})
         conn.close()
 
         if result:
-            request.session['user_id'] = result[0]['u']['user_id']  # Save user ID in session
-            return JsonResponse({'success': True, 'message': 'Login successful'})
-        return JsonResponse({'success': False, 'error': 'Invalid credentials'}, status=400)
+            hashed_password = result[0].get('hashed_password')
+            user_id = result[0].get('user_id')
 
+            if bcrypt.verify(password, hashed_password):  # Verify the hashed password
+                request.session['user_id'] = user_id  # Save user ID in session
+                return JsonResponse({'success': True, 'message': 'Login successful'})
+            else:
+                return JsonResponse({'success': False, 'error': 'Invalid credentials'}, status=400)
+
+        return JsonResponse({'success': False, 'error': 'Invalid credentials'}, status=400)
 
 
 @csrf_exempt
