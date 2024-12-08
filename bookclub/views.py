@@ -95,44 +95,75 @@ from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 import json
+import logging
+from django.views.decorators.csrf import csrf_exempt
+
+# Initialize the logger at the top of the file
+logger = logging.getLogger(__name__)
+
+from django.shortcuts import render
+from django.http import JsonResponse, HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+import logging
+import json
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 @csrf_exempt
 def login(request):
-    if request.method == "GET":
-        # Render the login.html template
-        return render(request, "login.html")  # Ensure "login.html" exists in your templates folder
+    try:
+        if request.method == "GET":
+            # Render the login page for GET requests
+            logger.info("Rendering login page")
+            return render(request, "login.html")  # Ensure "login.html" exists in your templates folder
 
-    elif request.method == "POST":
-        data = json.loads(request.body)
-        email = data.get('email')
-        password = data.get('password')
+        elif request.method == "POST":
+            # Process the login form for POST requests
+            logger.info("Login POST request received")
+            try:
+                data = json.loads(request.body)
+                email = data.get('email')
+                password = data.get('password')
 
-        if not email or not password:
-            return JsonResponse({'success': False, 'error': 'Email and password are required'}, status=400)
+                if not email or not password:
+                    return JsonResponse({'success': False, 'error': 'Email and password are required'}, status=400)
 
-        conn = Neo4jConnection()
-        query = """
-        MATCH (u:User {email: $email})
-        RETURN u.password AS stored_password, u.user_id AS user_id
-        """
-        result = conn.query(query, {'email': email})
-        conn.close()
+                # Authenticate the user using Neo4j
+                conn = Neo4jConnection()
+                query = """
+                MATCH (u:User {email: $email})
+                RETURN u.password AS stored_password, u.user_id AS user_id
+                """
+                result = conn.query(query, {'email': email})
+                conn.close()
 
-        if result:
-            stored_password = result[0].get('stored_password')
-            user_id = result[0].get('user_id')
+                if result:
+                    stored_password = result[0].get('stored_password')
+                    user_id = result[0].get('user_id')
 
-            # Password check (update this if passwords are hashed)
-            if password == stored_password:
-                request.session['user_id'] = user_id  # Save user ID in session
-                return JsonResponse({'success': True, 'message': 'Login successful'})
-            else:
-                return JsonResponse({'success': False, 'error': 'Invalid credentials'}, status=400)
+                    # Password validation (add hashing if required)
+                    if password == stored_password:
+                        request.session['user_id'] = user_id  # Save user ID in session
+                        return JsonResponse({'success': True, 'message': 'Login successful'})
+                    else:
+                        return JsonResponse({'success': False, 'error': 'Invalid credentials'}, status=400)
+                else:
+                    return JsonResponse({'success': False, 'error': 'Invalid credentials'}, status=400)
 
-        return JsonResponse({'success': False, 'error': 'Invalid credentials'}, status=400)
+            except json.JSONDecodeError:
+                logger.error("Invalid JSON in request body")
+                return JsonResponse({'success': False, 'error': 'Invalid JSON format'}, status=400)
 
-    # Handle unsupported HTTP methods
-    return HttpResponse("Method not allowed", status=405)
+        else:
+            # Return a 405 response for unsupported methods
+            logger.warning("Invalid request method")
+            return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
+
+    except Exception as e:
+        logger.error(f"Unexpected error in login view: {e}")
+        return JsonResponse({'success': False, 'error': 'An unexpected error occurred'}, status=500)
+
 
 
 
