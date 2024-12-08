@@ -98,3 +98,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 NEO4J_URI = config('NEO4J_URI', default='bolt://localhost:7687')
 NEO4J_USERNAME = config('NEO4J_USERNAME', default='neo4j')
 NEO4J_PASSWORD = config('NEO4J_PASSWORD', default='password')
+
+from decouple import config
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('SUPABASE_DB_NAME'),
+        'USER': config('SUPABASE_DB_USER'),
+        'PASSWORD': config('SUPABASE_DB_PASSWORD'),
+        'HOST': config('SUPABASE_DB_HOST'),
+        'PORT': config('SUPABASE_DB_PORT', default='5432'),
+    }
+}
+
+
+
