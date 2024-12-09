@@ -7,19 +7,120 @@
     <title>Sign Up</title>
     {% load static %}
     <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
+    <style>
+        /* Center all content on the page */
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f9f9f9;
+        }
 
+        .container {
+            text-align: center;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 300px;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background-color: #f8f9fa;
+            color: #007bff;
+            border: 1px solid #007bff;
+            padding: 12px 24px;
+            border-radius: 4px;
+        }
+
+        button:hover {
+            background-color: #007bff;
+            color: #ffffff;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        #login-section {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        #go-to-login {
+            background-color: #f8f9fa;
+            color: #007bff;
+            border: 1px solid #007bff;
+            padding: 8px 16px;
+            border-radius: 4px;
+        }
+
+        #go-to-login:hover {
+            background-color: #007bff;
+            color: #ffffff;
+        }
+
+        .error-message {
+            color: red;
+            font-size: 12px;
+            margin: 5px 0 0;
+            text-align: left;
+            width: 100%;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 600px) {
+            input {
+                width: 90%;
+            }
+            button {
+                font-size: 14px;
+                padding: 10px 20px;
+            }
+        }
+    </style>
 </head>
 <body>
-    <h1>Sign Up</h1>
-    <form id="signup-form">
-        <input type="text" id="name" placeholder="Name" required><br>
-        <input type="email" id="email" placeholder="Email" required><br>
-        <input type="password" id="password" placeholder="Password" required><br>
-        <button type="submit">Sign Up</button>
-    </form>
+    <div class="container">
+        <h1>Sign Up</h1>
+        <form id="signup-form">
+            <input type="text" id="name" placeholder="Name" required aria-label="Name">
+            <p id="name-error" class="error-message"></p>
+            <input type="email" id="email" placeholder="Email" required aria-label="Email">
+            <p id="email-error" class="error-message"></p>
+            <input type="password" id="password" placeholder="Password" required aria-label="Password">
+            <p id="password-error" class="error-message"></p>
+            <button type="submit">Sign Up</button>
+        </form>
+    </div>
     
-    <p>Already signed up?</p>
-    <button id="go-to-login">Go to Login Page</button>
+    <div id="login-section">
+        <p>Already signed up?</p>
+        <button id="go-to-login">Go to Login Page</button>
+    </div>
 
     <script>
         // Handle sign-up form submission
@@ -29,6 +130,25 @@
             const name = document.getElementById("name").value;
             const email = document.getElementById("email").value;
             const password = document.getElementById("password").value;
+
+            // Reset error messages
+            document.getElementById("name-error").textContent = "";
+            document.getElementById("email-error").textContent = "";
+            document.getElementById("password-error").textContent = "";
+
+            // Perform simple client-side validation
+            if (!name) {
+                document.getElementById("name-error").textContent = "Name is required.";
+                return;
+            }
+            if (!email.includes("@")) {
+                document.getElementById("email-error").textContent = "Invalid email address.";
+                return;
+            }
+            if (password.length < 6) {
+                document.getElementById("password-error").textContent = "Password must be at least 6 characters.";
+                return;
+            }
 
             fetch("/signup/", {
                 method: "POST",
