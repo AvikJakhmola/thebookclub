@@ -1,11 +1,14 @@
-from django.shortcuts import render
-from django.http import JsonResponse
-from .neo4j import Neo4jConnection  # Ensure the correct import path
+from django.shortcuts import render, redirect
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
+from .neo4j import Neo4jConnection 
+from passlib.hash import bcrypt
 import json
-from django.http import JsonResponse
+import uuid
+import logging
 
-from django.views.decorators.csrf import csrf_exempt
+logger = logging.getLogger(__name__)
+
 
 @csrf_exempt
 def update_user_progress(request):
@@ -37,15 +40,6 @@ def update_user_progress(request):
         return JsonResponse({"success": False, "error": "Invalid request method"}, status=405)
 
 
-import uuid
-
-from django.views.decorators.csrf import csrf_exempt
-
-from passlib.hash import bcrypt
-
-from django.http import JsonResponse, HttpResponse
-from django.shortcuts import render
-
 @csrf_exempt
 def signup(request):
     if request.method == "GET":
@@ -67,11 +61,13 @@ def signup(request):
         # Create the user in the database and set relationships
         conn = Neo4jConnection()
         try:
+            # Create the User node
             user_query = """
             CREATE (u:User {user_id: $user_id, name: $name, email: $email, password: $password})
             """
             conn.query(user_query, {'user_id': user_id, 'name': name, 'email': email, 'password': password})
 
+            # Create the CAN_ACCESS relationship between User and Library
             relationship_query = """
             MATCH (u:User {user_id: $user_id})
             MERGE (l:Library {name: "My Library"})
@@ -79,6 +75,16 @@ def signup(request):
             """
             conn.query(relationship_query, {'user_id': user_id})
 
+            # Create PROGRESS relationships for all existing pages
+            progress_query = """
+            MATCH (u:User {user_id: $user_id}), (p:Page)
+            MERGE (u)-[:PROGRESS {completed: false}]->(p)
+            """
+            conn.query(progress_query, {'user_id': user_id})
+
+        except Exception as e:
+            # Handle errors during database operations
+            return JsonResponse({'success': False, 'error': str(e)}, status=500)
         finally:
             conn.close()
 
@@ -87,28 +93,6 @@ def signup(request):
     # If the request method is not GET or POST, return an error
     return HttpResponse("Method not allowed", status=405)
 
-
-
-from passlib.hash import bcrypt
-
-from django.http import JsonResponse, HttpResponse
-from django.shortcuts import render
-from django.views.decorators.csrf import csrf_exempt
-import json
-import logging
-from django.views.decorators.csrf import csrf_exempt
-
-# Initialize the logger at the top of the file
-logger = logging.getLogger(__name__)
-
-from django.shortcuts import render
-from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
-import logging
-import json
-
-# Initialize logger
-logger = logging.getLogger(__name__)
 
 @csrf_exempt
 def login(request):
@@ -163,8 +147,6 @@ def login(request):
     except Exception as e:
         logger.error(f"Unexpected error in login view: {e}")
         return JsonResponse({'success': False, 'error': 'An unexpected error occurred'}, status=500)
-
-
 
 
 @csrf_exempt
@@ -229,11 +211,6 @@ def home(request):
     # Pass the user's name and books to the template
     return render(request, "home.html", {'user_name': user_name, 'books': books})
 
-
-
-from django.http import JsonResponse
-from .neo4j import Neo4jConnection
-
 def get_book_progress(request, book_number):
     user_id = request.session.get('user_id')  # Assuming the user is logged in and session-managed
     if not user_id:
@@ -267,7 +244,6 @@ def get_book_progress(request, book_number):
     except Exception as e:
         conn.close()
         return JsonResponse({"success": False, "error": str(e)}, status=500)
-
 
 
 def unitview(request, book_number):
@@ -342,16 +318,6 @@ def unitview(request, book_number):
 
     return render(request, "unitview.html", context)
 
-
-
-
-
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-import json
-from .neo4j import Neo4jConnection  # Ensure this import is correct
-
-from django.views.decorators.csrf import csrf_exempt
 
 @csrf_exempt
 def toggle_page_completed_status(request):
