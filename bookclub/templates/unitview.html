@@ -190,7 +190,8 @@
                 <div>
                     {% for unit in units %}
                     <div class="unit-row">
-                        <div class="unit-title">Unit {{ unit.unit }}: {{ unit.pages|length }} Pages</div>
+                        <!-- Display unit title instead of unit id -->
+                        <div class="unit-title">{{ unit.unit_title }}: {{ unit.pages|length }} Pages</div>
                         {% for page in unit.pages %}
                         <div class="page-row">
                             <!-- Render tick mark if completed -->
@@ -207,6 +208,7 @@
                     {% endfor %}
                 </div>
             </div>
+            
         </div>
     </div>
 
